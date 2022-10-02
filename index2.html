@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Axios interceptor for auth</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  </head>
+  <body>
+    <button id="_login">Login</button>
+    <button id="_getList">Get List</button>
+
+    <script>
+      // create instance axios
+      const instance = axios.create({
+        baseURL: "/api",
+        timeout: 3 * 1000,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      // axios interceptor
+      instance.interceptors.request.use(
+        config => {
+          if (config.url.indexOf("/login") !== -1 || config.url.indexOf("/refreshToken") !== -1) {
+            return config;
+          }
+          const token = getTokenInfo();
+          if (token) {
+            config.headers["x-auth-token"] = token;
+            console.log("Token duoc gui di", token);
+          }
+          return config;
+        },
+        err => {
+          return Promise.reject(err);
+        }
+      );
+
+      instance.interceptors.response.use(
+        async response => {
+          const { config } = response;
+          // except route
+          if (config.url.indexOf("/login") !== -1 || config.url.indexOf("/refreshToken") !== -1) {
+            return response;
+          }
+
+          // get response data
+          const { code, msg } = response.data;
+
+          if (code && code === 401) {
+            if (msg && msg === "jwt expired") {
+              console.log("Token het cmn han roi");
+              // step 1 : get access token from refresh token
+              const {
+                token,
+                elements: { accessToken },
+              } = await getRefreshToken();
+              // step 2 : check has new access token
+              if (accessToken) {
+                console.log("Da lay lai token moi toanh toa`nh toa`nh");
+                // save to localStorage
+                saveTokenInfoToLocalStorage(accessToken);
+                // assign new token to headers
+                config.headers["x-auth-token"] = accessToken;
+                return instance(config);
+              }
+            }
+          }
+
+          return response;
+        },
+        err => {
+          return Promise.reject(err);
+        }
+      );
+
+      // get btn
+      const loginBtn = document.getElementById("_login");
+      const getListBtn = document.getElementById("_getList");
+
+      // method call api
+      async function login() {
+        return (await instance.get("/login")).data;
+      }
+      async function getListUsers() {
+        return (await instance.get("/users")).data;
+      }
+      async function getRefreshToken() {
+        return (await instance.get("/refreshToken")).data;
+      }
+
+      // add event
+      if (loginBtn) {
+        loginBtn.addEventListener("click", async () => {
+          const {
+            status,
+            elements: { accessToken },
+          } = await login();
+          if (status === "success") {
+            saveTokenInfoToLocalStorage(accessToken);
+          }
+        });
+      }
+
+      if (getListBtn) {
+        getListBtn.addEventListener("click", async () => {
+          const data = await getListUsers();
+          console.log("data get users: ", data);
+        });
+      }
+
+      // handle in localStorage
+      function saveTokenInfoToLocalStorage(token) {
+        localStorage.setItem("accessToken", token);
+      }
+
+      function getTokenInfo() {
+        return localStorage.getItem("accessToken") || null;
+      }
+    </script>
+  </body>
+</html>

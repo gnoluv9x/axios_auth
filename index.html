@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Axios interceptor for auth</title>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+  </head>
+  <body>
+    <button id="_login">Login</button>
+    <button id="_getList">Get List</button>
+
+    <script>
+      // create instance axios
+      const instance = axios.create({
+        baseURL: "/api",
+        timeout: 3 * 1000,
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
+
+      // axios interceptor
+      instance.interceptors.request.use(
+        async config => {
+          // check request url (except login, refresh token)
+          if (config.url.indexOf("/login") !== -1 || config.url.indexOf("/refreshToken") !== -1) {
+            return config;
+          }
+
+          // check accessToken
+          const { token, expiredTime } = getTokenInfo();
+          const timeNow = Date.now();
+          console.log("expiredTime: ", expiredTime, "timeNow: ", timeNow);
+          if (expiredTime < timeNow) {
+            console.log("Token expired cmnr");
+            try {
+              const {
+                status,
+                elements: { token, expiredTime },
+              } = await getRefreshToken();
+              if (status === "success") {
+                saveTokenInfoToLocalStorage({ token, expiredTime });
+                return config;
+              } else {
+                throw new Error("Khong lay lai duoc refesh token roi");
+              }
+            } catch (error) {
+              return Promise.reject(error);
+            }
+          }
+
+          return config;
+        },
+        err => {
+          return Promise.reject(err);
+        }
+      );
+
+      // get btn
+      const loginBtn = document.getElementById("_login");
+      const getListBtn = document.getElementById("_getList");
+
+      // method call api
+      async function login() {
+        return (await instance.get("/login")).data;
+      }
+      async function getListUsers() {
+        return (await instance.get("/users")).data;
+      }
+      async function getRefreshToken() {
+        return (await instance.get("/refreshToken")).data;
+      }
+
+      // add event
+      if (loginBtn) {
+        loginBtn.addEventListener("click", async () => {
+          const {
+            status,
+            elements: { token, expiredTime },
+          } = await login();
+          if (status === "success") {
+            saveTokenInfoToLocalStorage({ token, expiredTime });
+          }
+        });
+      }
+
+      if (getListBtn) {
+        getListBtn.addEventListener("click", async () => {
+          const data = await getListUsers();
+          console.log("data users: ", data);
+        });
+      }
+
+      // handle in localStorage
+      function saveTokenInfoToLocalStorage({ token, expiredTime }) {
+        localStorage.setItem("accessToken", JSON.stringify({ token, expiredTime }));
+      }
+
+      function getTokenInfo() {
+        return JSON.parse(localStorage.getItem("accessToken"));
+      }
+    </script>
+  </body>
+</html>
