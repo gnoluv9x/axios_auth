@@ -1,5 +1,9 @@
-# This is 2 branch:
+Dự án này sử dụng axios interceptors để xử lý refresh token.
 
-## useCookie
+# There are 2 branch:
+
+- Nói về nơi lưu trữ token
+
+## useCookie:
 
 ## useLocalStorage
